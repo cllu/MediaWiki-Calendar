@@ -87,7 +87,6 @@ if (!defined('MEDIAWIKI')) {
 }
 
 $gCalendarVersion = "v3.8.4 (9/15/2009)";
-//$gCalendarVersion = "trunk/beta";
 
 # Credits	
 $wgExtensionCredits['parserhook'][] = array(
@@ -104,8 +103,6 @@ $wgExtensionFunctions[] = "wfCalendarExtension";
 $wgExtensionMessagesFiles['wfCalendarExtension'] = "$path/calendar.i18n.php";
 
 
-//$wgHooks['LanguageGetMagic'][]       = 'wfCalendarFunctions_Magic';
-
  // function adds the wiki extension
 function wfCalendarExtension() {
 	global $wgParser;
@@ -113,8 +110,6 @@ function wfCalendarExtension() {
 	global $wgCalendarSidebarRef;
 	$wgParser->setHook( "calendar", "displayCalendar" );
 	wfLoadExtensionMessages( 'wfCalendarExtension' ); 
- //   if ( isset($wgCalendarSidebarRef) ) $wgHooks['SkinTemplateOutputPageBeforeExec'][] = 
-//		'wfCalendarSkinTemplateOutputPageBeforeExec';
 }
 
 // Hook to inject Calendar into sidebar
@@ -187,10 +182,6 @@ class Calendar extends CalendarArticles
 			$this->updateDate();
 
 		$this->initalizeHTML();		
-		$this->readStylepage();
-		
-		if($this->setting('usetemplates'))
-			$this->buildTemplateEvents();
 		
 		if(!$this->setting('disablerecurrences'))
 			$this->buildVCalEvents();
@@ -275,12 +266,8 @@ class Calendar extends CalendarArticles
 		$this->html_template = file_get_contents($extensionPath . "/templates/calendar_template.html");
 	
 		//add css; this is set as 'default.css' or an override
-		if($wgVersion >= '1.14'){
-			$wgOut->addStyle($cssURL . $css); //clean method
-		}
-		else{
-			$wgOut->addHTML($css_data); //ugly method
-		}
+		$wgOut->addStyle($cssURL . $css); //clean method
+		
 	
 		$this->templateHTML['normal'] = $this->searchHTML($this->html_template,"<!-- Day Start -->", "<!-- Day End -->");
 		$this->templateHTML['missing'] = $this->searchHTML($this->html_template,"<!-- Missing Start -->", "<!-- Missing End -->");
@@ -374,7 +361,8 @@ class Calendar extends CalendarArticles
 			$tag_wday = "calendarWeekday";
 		}
 	
-		$tag_addEvent = $this->buildAddEventLink($month, $day, $year);
+		//$tag_addEvent = $this->buildAddEventLink($month, $day, $year);
+        $tag_addEvent = "<a>Add</a>";
 
 		$tag_mode = 'monthMode';
 		if($mode == 'events'){
@@ -468,23 +456,6 @@ class Calendar extends CalendarArticles
 		return $html;
 	}
 	
-	// build the 'template' button	
-	function buildTemplateLink(){	
-		if(!$this->setting('usetemplates')) return "";
-
-		$articleName = $this->wikiRoot . wfUrlencode($this->calendarPageName) . "/" . $this->month . "-" . $this->year . " -Template&action=edit" . "'\">";
-		
-		$value = Common::translate('template_btn');
-		$title = Common::translate('template_btn_tip');
-
-		if($this->setting('locktemplates'))
-			$ret = "<input class='btn' type='button' title='$title' disabled value=\"$value\" onClick=\"javascript:document.location='" . $articleName;
-		else
-			$ret = "<input class='btn' type='button' title='$title' value=\"$value\" onClick=\"javascript:document.location='" . $articleName;
-		
-		return $ret;			
-	}
-
 	function loadiCalLink(){
 		$ical_value  = Common::translate('ical_btn');
 		$ical_title = Common::translate('ical_btn_tip');
@@ -506,25 +477,7 @@ class Calendar extends CalendarArticles
 		return $ret;
 	}
 	
-	// build the 'template' button	
-	function buildConfigLink($bTextLink = false){	
-		
-		if(!$this->setting('useconfigpage')) return;
-		
-		if($this->setting('useconfigpage',false) == 'disablelinks') return "";
-		
-		$value = Common::translate('config_btn');
-		$title = Common::translate('config_btn_tip');
-		
-		if(!$bTextLink){
-			$articleConfig = $this->wikiRoot . wfUrlencode($this->configPageName) . "&action=edit" . "';\">";
-			$ret = "<input class='btn' type='button' title='$title' value=\"$value\" onClick=\"javascript:document.location='" . $articleConfig;
-		}else
-			$ret = "<a href='" . $this->wikiRoot . wfUrlencode($this->configPageName) . "&action=edit'>($value...)</a>";
 
-		return $ret;			
-	}
-	
 	function renderEventList(){
 		$events = "";
 		
@@ -555,9 +508,6 @@ class Calendar extends CalendarArticles
 		
 			$this->debug->set("renderEventList Ended");
 			
-			$ret = "<i> " . $this->buildConfigLink(true) . "</i>" 
-				. $events;
-
 			return "<table width=100%>" . $ret . "</table>";	
 		}
 	}
@@ -641,8 +591,7 @@ class Calendar extends CalendarArticles
 		
 		$this->initalizeMonth(0,1);
 		
-		$ret = $this->buildConfigLink(true)
-			. $this->getHTMLForDay($this->month, $this->day, $this->year, 'long', 'day');
+		$ret = $this->getHTMLForDay($this->month, $this->day, $this->year, 'long', 'day');
 			
 		$this->debug->set("renderDate Ended");		
 		return "<table>$ret</table>";
@@ -694,10 +643,6 @@ class Calendar extends CalendarArticles
 	}
 	
     function renderMonth() {   
-		global $gCalendarVersion;
-			
-		$tag_templateButton = "";
-		
 		$this->calendarMode = "normal";
        	
 	    /***** Replacement tags *****/
@@ -713,13 +658,9 @@ class Calendar extends CalendarArticles
 	    $tag_day = "";                 	// the calendar day [[Day]]
 	    $tag_addEvent = "";            	// the add event link [[AddEvent]]
 	    $tag_eventList = "";           	// the event list [[EventList]]
-		$tag_eventStyleButton = "";		// event style buttonn [[EventStyleBtn]]
-		$tag_templateButton = "";		// template button for multiple events [[TemplateButton]]
 		$tag_todayButton = "";			// today button [[TodayButton]]
-		$tag_configButton = ""; 		// config page button
 		$tag_timeTrackValues = "";     	// summary of time tracked events
 		$tag_loadiCalButton = "";
-		$tag_about = "";
         
 	    /***** Calendar parts (loaded from template) *****/
 	    $html_header = "";             // the calendar header
@@ -743,9 +684,6 @@ class Calendar extends CalendarArticles
 		else
 			$tag_calendarName = $this->name;
 		
-		$about_translated = Common::translate('about');
-		$tag_about = "<a title='$about_translated' href='http://www.mediawiki.org/wiki/Extension:Calendar_(Kenyu73)' target='new'>about</a>...";
-		
 	    // set the month's mont and year tags
 		$tag_calendarMonth = Common::translate($this->month, 'month');
 	    $tag_calendarYear = $this->year;
@@ -753,17 +691,6 @@ class Calendar extends CalendarArticles
 		$tag_monthSelect =  $this->buildMonthSelectBox();;
     	$tag_yearSelect = $this->buildYearSelectBox();
 		
-		$tag_templateButton = $this->buildTemplateLink();
-		$tag_configButton = $this->buildConfigLink(false);
-
-		$style_value = Common::translate('styles_btn');
-		$style_tip = Common::translate('styles_btn_tip');
-		
-		if(!$this->setting("disablestyles")){
-			$articleStyle = $this->wikiRoot . wfUrlencode($this->calendarPageName) . "/style&action=edit" . "';\">";
-			$tag_eventStyleButton = "<input class='btn' type=\"button\" title=\"$style_tip\" value=\"$style_value\" onClick=\"javascript:document.location='" . $articleStyle;
-		}
-	
 		// build the 'today' button	
 		$btnToday = Common::translate('today');
 	    $tag_todayButton = "<input class='btn' name='today' type='submit' value=\"$btnToday\">";
@@ -846,13 +773,8 @@ class Calendar extends CalendarArticles
 			
 		// replace potential variables in footer
 		$tempString = str_replace("[[TodayData]]", $this->tag_HiddenData, $tempString);
-		$tempString = str_replace("[[TemplateButton]]", $tag_templateButton, $tempString);
-		$tempString = str_replace("[[EventStyleBtn]]", $tag_eventStyleButton, $tempString);
-		$tempString = str_replace("[[Version]]", $gCalendarVersion, $tempString);
-		$tempString = str_replace("[[ConfigurationButton]]", $tag_configButton, $tempString);
 		$tempString = str_replace("[[TimeTrackValues]]", $tag_timeTrackValues, $tempString);
 		$tempString = str_replace("[[Load_iCal]]", $tag_loadiCalButton, $tempString);
-		$tempString = str_replace("[[About]]", $tag_about, $tempString);
 		
 	    $ret .= $tempString;	
 		$ret = $this->stripLeadingSpace($ret);
@@ -1133,7 +1055,7 @@ class Calendar extends CalendarArticles
 		
 		$title = "$tag_previousYearButton &nbsp; $this->year &nbsp; $tag_nextYearButton";
 		
-		$ret = "<tr><td>" . $this->buildConfigLink(true) . "</td><td $styleTitle colspan=2>$title</td><td align=right>$this->tag_views</td></tr>";
+		$ret = "<tr><td $styleTitle colspan=2>$title</td><td align=right>$this->tag_views</td></tr>";
 
 		for($m=0;$m <12; $m++){
 			$cal .= "<td style='text-align:center; vertical-align:top;'>" . $this->buildSimpleCalendar($nextMon++, $nextYear, true) . "</td>";
@@ -1184,8 +1106,8 @@ class Calendar extends CalendarArticles
 		}
 		
 		//hide mode buttons if selected via parameter tag
-		$ret .= "<tr>&nbsp;<td></td><td $styleTitle colspan=2>&nbsp;$title</td>" . "<td>&nbsp;<i>". $this->buildConfigLink(true) . "</i></td>"
-			. "<td align=right colspan=$colspan>$tag_todayButton &nbsp;&nbsp; $this->tag_views</td><td>&nbsp;</td></tr>";	
+		$ret .= "<tr>&nbsp;<td></td><td $styleTitle colspan=2>&nbsp;$title</td>"
+                . "<td align=right colspan=$colspan>$tag_todayButton &nbsp;&nbsp; $this->tag_views</td><td>&nbsp;</td></tr>";	
 		
 		if($this->setting('monday')){
 			$ret .= "<tr><td></td>";
@@ -1399,14 +1321,6 @@ function displayCalendar($paramstring, $params = array()) {
 		
 	// normal calendar...
 	$calendar->calendarPageName = "$title/$name";
-	$calendar->configPageName = "$title/$name/config";
-	
-	if(isset($params["useconfigpage"])) {	
-		$configs = $calendar->getConfig("$title/$name");
-		
-		//merge the config page and the calendar tag params; tag params overwrite config file
-		$params = array_merge($configs, $params);	
-	}
 	
 	// just in case i rename some preferences... we can make them backwards compatible here...
 	legacyAliasChecks($params);

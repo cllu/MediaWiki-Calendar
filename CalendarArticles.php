@@ -65,13 +65,6 @@
 		$lines = split("\n",$body);
 		$cntLines = count($lines);
 	
-		// dont use section events... only line 1 of the page
-		if($this->setting('disablesectionevents')){
-			$key = $lines[0]; //initalize the key
-			$head[$key] = ""; 
-			$cntLines = 0;
-		}
-	
 		for($i=0; $i<$cntLines; $i++){
 			$line = $lines[$i];
 			if(substr($line,0,2) == '=='){
@@ -99,12 +92,6 @@
 	// this is the main logic/format handler; the '$event' is checked for triggers here...
 	public function buildEvent($month, $day, $year, $event, $page, $body, $eventType='addevent', $bRepeats=false){	
 	
-		// user triggered yearly repeat event...
-		if(substr($event,0,2) == '##'){
-			$event = trim(str_replace("##", "", $event));
-			$this->buildRecurrenceEvent($month, $day, $year, $event, $page);
-		}
-
 		//check for repeating events
 		$arrEvent = split("#",$event);
 		if( isset($arrEvent[1]) && ($arrEvent[0] != 0) && $this->setting('enablerepeatevents') ){
@@ -125,15 +112,6 @@
 		$ret = $list = "";
 		$bFound = false;
 
-		// not using 'templates' array, but the purpose was to put all these events above other events...
-		if(isset($this->arrArticles['templates'])){	
-			foreach($this->arrArticles['templates'] as $cArticle){
-				if($cArticle->month == $month && $cArticle->day == $day && $cArticle->year == $year){
-					$ret .= $cArticle->html;
-				}
-			}	
-		}
-		
 		// we want to format the normal 'add event' items in 1 table cell
 		// this creates less spacing and creates a better <ul>
 		$head = "<tr cellpadding=0 cellspacing=0 ><td class='calendarTransparent singleEvent'>";
@@ -174,8 +152,6 @@
 		
 		// format for different event types
 		$class = "baseEvent ";
-		//if($bRepeats) $class .= "repeatEvent ";
-		//if($eventType == "recurrence") $class .= "recurrenceEvent ";
 		$class = trim($class);		
 		
 		$cArticle->month = $month;	
@@ -191,50 +167,11 @@
 		$this->arrArticles['events'][] = $cArticle;	
 	}
 	
-	// when the calendar loads, we want to put all the template events into memory
-	// so we dont have to read the wiki db for every day
-	public function addTemplate($month, $year, $pagename){
-		$displayText = "";
-		$arrEvent = array();
-	
-		$articleName = $pagename . "/" . $month . "-" . $year . " -Template";
-		$article = new Article(Title::newFromText($articleName));
-
-		if (!$article->exists()) return "";
-		
-		$displayText  = $article->fetchContent(0,false,false);
-	
-		$arrAllEvents=split(chr(10),$displayText);
-		if (count($arrAllEvents) > 0){
-			for($i=0; $i<count($arrAllEvents); $i++){
-				$arrEvent = split("#",$arrAllEvents[$i]);
-				
-				if(!isset($arrEvent[1])) continue;//skip 
-				
-				if(strlen($arrEvent[1]) > 0){
-					$day = $arrEvent[0];
-					$arrRepeat = split("-",$arrEvent[0]);
-					
-					if(count($arrRepeat) > 1){
-						$day = $arrRepeat[0];
-						while($day <= $arrRepeat[1]){
-							$this->buildEvent($month, $day, $year,  $arrEvent[1], $articleName, "", "templates", true);
-							$day++;
-						}
-					}else{
-						$this->buildEvent($month, $day, $year, $arrEvent[1], $articleName, "", "templates");
-					}
-				}
-			}
-		}	
-	}
-
 	// this is the FINAL stop; the events are stored here then pulled out
 	// and displayed later via "getArticleLinks()"... 
 	private function add($month, $day, $year, $eventname, $page, $body, $eventType='addevent', $bRepeats=false){
 		// $eventType='default' -- addevent
 		// $eventType='recurrence'
-		// $eventType='template'
 		global $wgParser;
 		
 		$cArticle = new CalendarArticle($month, $day, $year);
@@ -289,10 +226,7 @@
 
 		// we only want the displayed calendar year totals
 		if($this->year == $year){
-			if($eventType=='templates')
-				$this->arrTimeTrack[$type.' (y)'][] = $arrType[1];
-			else
-				$this->arrTimeTrack[$type.' (m)'][] = $arrType[1];
+			$this->arrTimeTrack[$type.' (m)'][] = $arrType[1];
 		}
 		
 		//piece together any prefixes that the code may have added - like (r) for repeat events
@@ -324,121 +258,8 @@
 
 		return $html_head . $ret . $html_foot;
 	}
-	
-	//find the number of current events and "build" the <add event> link
-    public function buildAddEventLink($month, $day, $year, $text="") {
-		
-		if($day < 1) return "";
-		$section_new = '';
-		
-		if($this->setting('disableaddevent') && strlen($text) == 0) return "";
-		if($this->setting('disableaddevent') && strlen($text) > 0) return $day;
-		
-    	$articleName = "";    	// the name of the article to check for
-    	$articleCount = 1;    	// the article count
-		
-		if($text == "")
-			$text = "<u>" . Common::translate("add_event") . "</u>";
-			
-		$tip = Common::translate('add_event_tip');
-		
-		if($this->setting('weekofyear')){
-			$tip .= " (wk:" . $this->getWeekOfTheYear($month,$day,$year,true) . ")";
-		}
-		
-		//$date = "$month-$day-$year";
-		$date = $this->userDateFormat($month, $day, $year);
 
-		$articleName = $this->getNextAvailableArticle($this->calendarPageName, $date);
-		
-		// if we're using multi-event mode, then default to section=new
-		if( $this->setting('usesectionevents') )
-			$section_new = "&section=new";
-		
-		$newURL = "<a title='$tip' href='" . $this->wikiRoot . wfUrlencode($articleName) . "&action=edit$section_new'>$text</a>";
-		return $newURL;
-	}
-
-	public function getNextAvailableArticle($page, $date, $event_zero=false){
-		$stop = false;
-		$page = "$page/$date -Event "; 
-		$articleCount = 1;
-		
-		// for ical option and setting all icals to Event -0 (== event ==) style
-		if($event_zero)
-			return $page . "0"; 
-		
-		$max_articles = $this->setting('maxdailyevents',false);
-		
-		// bump up the max for iCal imports...but not to much in case of a runaway
-		// we also want to ignore the inforced 'usesectionevents'..however, the 
-		// calendar will still only display the 'maxdailyevents' value
-		if($this->setting('ical')){
-			$max_articles += 5; 
-		}
-		else{
-			if($this->setting('usesectionevents') && !$this->setting('ical'))
-				return $page . $articleCount;
-		}
-		
-		$article = new Article(Title::newFromText($page . $articleCount));
-		
-		// dont care about the articles here, just need to get next available article
-		while ($article->exists() && !$stop) {
-			$displayText  = $article->fetchContent(0,false,false);
-			if(strlen($displayText) > 0){
-				$articleCount++;
-				$article = new Article(Title::newFromText($page . $articleCount));
-				
-				if($articleCount == $max_articles)
-					$stop = true;
-			}
-			else $stop = true;
-		}
-
-		return  $page . $articleCount;
-	}
-	
-	function readStylepage(){
-		$articleName = $this->calendarPageName . "/" . "style";	
-		$article = new Article(Title::newFromText($articleName));
-
-		if ($article->exists()){
-			$displayText  = $article->fetchContent(0,false,false);	
-			$this->arrStyle = split(chr(10), $displayText);
-		}
-	}	
-	
-	public function getConfig($pagename){
-	
-		$params = array();	
-		
-		$articleName = "$pagename/config";
-		$article = new Article(Title::newFromText($articleName));
-
-		if ($article->exists()){
-			$body  = $article->fetchContent(0,false,false);
-			$body = str_replace("\"", "", $body);	
-
-			$arr = split("\n", $body);
-			$cnt = count($arr);
-
-			for($i=0; $i<$cnt; $i++){
-				$arrParams = split("=", $arr[$i]);
-				$key = trim($arrParams[0]);
-				
-				if($key != 'useconfigpage'){		// we dont want users to lock themselves out of the config page....		
-					if(count($arrParams) == 2) 
-						$params[$key] = trim($arrParams[1]); // we have both $key and $value
-					else
-						$params[$key] = $key; // init the value with itself if $value is null
-				}
-			}
-		}
-		return $params;
-	}
-	
-    // returns the link for an article, along with summary in the title tag, given a name
+	// returns the link for an article, along with summary in the title tag, given a name
     private function articleLink($title, $text, $noLink=false){
 		global $wgParser;
 		
@@ -455,8 +276,6 @@
 				$ret = "<a $style title='$arrText[0]' href='" . $this->wikiRoot . wfUrlencode($title) . "&action=edit'>$arrText[1]</a>";
 			else
 				$ret = "<a $style title='$arrText[0]' href='" . $this->wikiRoot . wfUrlencode($title)  . "'>$arrText[1]</a>";
-		
-		
 		
 		return $ret;
     }
@@ -480,33 +299,8 @@
 			$ret[2] = ""; //styles
 		}
 		
-		if(!$this->setting('disablestyles'))
-			$ret[2] = $this->buildStyleBySearch($plaintext);
-		
 		return $ret;
 	}	
-	
-
-	
-	private function buildStyleBySearch($text){
-
-		$stylePage = '';
-	
-		// set default style if available, if not... use std windows defaults
-		$defaultStyle = $this->setting('style', false);
-		
-		for($i=0; $i < count($this->arrStyle); $i++){
-			$arr = split("::", $this->arrStyle[$i]);
-			$cnt = count($arr);
-			
-			if(stripos($text, $arr[0]) !== false) {
-				$stylePage = trim($arr[1]);
-			}
-		}
-
-		//return "style='" . str_replace("'", "", "$defaultStyle;$stylePage") . "' ";
-		return "style='$defaultStyle;$stylePage' ";
-	}
 	
 	// creates a new page and populates it as required
 	function createNewPage($page, $event, $description, $summary){
@@ -700,15 +494,4 @@
 		
 		return $ret;
 	}
-/*	
-	public function chkConfigToolPage($configToolPage){
-	
-		$article = new Article(Title::newFromText($configToolPage));
-		
-		if(!$article->exists())
-			$article->doEdit("<config/>", "", EDIT_NEW);
-		elseif(trim($article->fetchContent()) == "")
-			$article->doEdit("<config/>", "", EDIT_UPDATE);
-	}	
-*/
 }
