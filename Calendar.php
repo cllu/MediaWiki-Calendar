@@ -68,14 +68,6 @@ if (isset($_POST["calendar_info"]) ){
 	$cookie_value = $month . "`" . $day . "`" . $year . "`" . $title . "`" . $name . "`" . $mode . "`";
 	setcookie($cookie_name, $cookie_value);
 	
-	if(isset($_POST["ical"])){
-		$path = "images/";
-		$path = $path . basename( $_FILES['uploadedfile']['name']); 
-		move_uploaded_file($_FILES['uploadedfile']['tmp_name'], $path);
-		
-		setcookie('calendar_ical', $path);
-	}	
-	
 	// reload the page..clear any purge commands that may be in it from an ical load...
 	$url = str_replace("&action=purge", "", $_SERVER['REQUEST_URI']);
 	header("Location: " . $url);
@@ -129,7 +121,6 @@ function calendar(){return "";}
 
 require_once ("$path/common.php");
 require_once ("$path/CalendarArticles.php");
-require_once ("$path/ical.class.php");
 require_once ("$path/debug.class.php");
 
 class Calendar extends CalendarArticles
@@ -181,9 +172,6 @@ class Calendar extends CalendarArticles
 
 		$this->initalizeHTML();		
 		
-		if(!$this->setting('disablerecurrences'))
-			$this->buildVCalEvents();
-	
 		if($this->paramstring != '')
 			$this->buildTagEvents($this->paramstring);
 
@@ -208,7 +196,7 @@ class Calendar extends CalendarArticles
 			$ret = $this->renderSimpleMonth();
 
 		if($userMode == 'week')
-			$ret = $this->renderWeek($this->setting('5dayweek'));		
+			$ret = $this->renderWeek();		
 			
 		if($userMode == 'day')
 			$ret = $this->renderDate();
@@ -306,13 +294,9 @@ class Calendar extends CalendarArticles
 			<td class="calendarHeading">[[day2]]</td>
 			<td class="calendarHeading">[[day3]]</td>
 			<td class="calendarHeading">[[day4]]</td>
-			<td class="calendarHeading">[[day5]]</td>';
-			
-		if(!$this->setting('5dayweek') ){
-			$this->tag_heading .=
-				'<td class="calendarHeading">[[day6]]</td>
-				<td class="calendarHeading">[[day7]]</td>';
-		}
+			<td class="calendarHeading">[[day5]]</td>
+			<td class="calendarHeading">[[day6]]</td>
+			<td class="calendarHeading">[[day7]]</td>';
 	}
 	
     // Generate the HTML for a given month
@@ -324,14 +308,6 @@ class Calendar extends CalendarArticles
 		// return an empty plain table cell (includes style class )
 		if ($day <= 0) {
 			return $this->templateHTML['missing'];
-		}
-		
-		if( $this->setting("5dayweek") ){
-			$dayOfWeek = date('N', mktime(12, 0, 0, $month, $day, $year));	// 0-6
-			
-			if($dayOfWeek > 5){	
-				return "";
-			}		
 		}
 		
 		// template table cell	
@@ -454,28 +430,6 @@ class Calendar extends CalendarArticles
 		return $html;
 	}
 	
-	function loadiCalLink(){
-		$ical_value  = Common::translate('ical_btn');
-		$ical_title = Common::translate('ical_btn_tip');
-		$bws_title = Common::translate('ical_browse_tip');
-		
-		$note = "";
-		$cookieName = str_replace(' ', '_', ($this->calendarPageName . "_ical_count"));
-		if(isset($_COOKIE[$cookieName])){
-			$cnt = $_COOKIE[$cookieName];
-			$note = "<font color=red>Completed the import of <b>$cnt</b> record(s).</font>";
-			setcookie($cookieName, "", time() -3600);
-		}
-
-		$ret = Common::translate('ical_inst') . "<br>"
-			. "<input name='uploadedfile' type='file' title=\"$bws_title\" size='50'><br>"	
-			. "<input name='ical' class='btn' type='submit' title=\"$ical_title\" value=\"$ical_value\">&nbsp;&nbsp;"
-			. $note;
-			
-		return $ret;
-	}
-	
-
 	function renderEventList(){
 		$events = "";
 		
@@ -524,21 +478,6 @@ class Calendar extends CalendarArticles
 		}
 	}
 	
-	// load ical RRULE (recurrence) events into memory
-	function buildVCalEvents(){	
-		$this->debug->set("buildVCalEvents started");
-		
-		$year = $this->year;
-		$month = 1;//$this->month;
-		$additionMonths = $this->month + 12;
-		
-		// lets just grab the next 12 months
-        for($i=0; $i < $additionMonths; $i++){ // loop thru 12 months
-			$this->addVCalEvents($this->calendarPageName, $year, $month);
-			$year = ($month == 12 ? ++$year : $year);
-			$month = ($month == 12 ? 1 : ++$month);
-		}
-	}
 	
 	// used for 'date' mode only...technically, this can be any date
 	function updateDate(){
@@ -650,7 +589,6 @@ class Calendar extends CalendarArticles
 	    $tag_eventList = "";           	// the event list [[EventList]]
 		$tag_todayButton = "";			// today button [[TodayButton]]
 		$tag_timeTrackValues = "";     	// summary of time tracked events
-		$tag_loadiCalButton = "";
         
 	    /***** Calendar parts (loaded from template) *****/
 	    $html_header = "";             // the calendar header
@@ -732,11 +670,8 @@ class Calendar extends CalendarArticles
 			$heading = str_replace("[[day3]]", Common::translate(4,'weekday'), $heading);
 			$heading = str_replace("[[day4]]", Common::translate(5,'weekday'), $heading);
 			$heading = str_replace("[[day5]]", Common::translate(6,'weekday'), $heading);
-			
-			if( !$this->setting('5dayweek') ){
-				$heading = str_replace("[[day6]]", Common::translate(7,'weekday'), $heading);
-				$heading = str_replace("[[day7]]", Common::translate(1,'weekday'), $heading);
-			}
+			$heading = str_replace("[[day6]]", Common::translate(7,'weekday'), $heading);
+			$heading = str_replace("[[day7]]", Common::translate(1,'weekday'), $heading);
 		}
 		else{
 			$heading = str_replace("[[day1]]", Common::translate(1,'weekday'), $heading);
@@ -744,11 +679,8 @@ class Calendar extends CalendarArticles
 			$heading = str_replace("[[day3]]", Common::translate(3,'weekday'), $heading);
 			$heading = str_replace("[[day4]]", Common::translate(4,'weekday'), $heading);
 			$heading = str_replace("[[day5]]", Common::translate(5,'weekday'), $heading);
-			
-			if( !$this->setting('5dayweek') ){
-				$heading = str_replace("[[day6]]", Common::translate(6,'weekday'), $heading);
-				$heading = str_replace("[[day7]]", Common::translate(7,'weekday'), $heading);
-			}			
+			$heading = str_replace("[[day6]]", Common::translate(6,'weekday'), $heading);
+			$heading = str_replace("[[day7]]", Common::translate(7,'weekday'), $heading);
 		}
 		
 		$ret = str_replace("[[HEADING]]", $heading, $ret);
@@ -758,13 +690,9 @@ class Calendar extends CalendarArticles
 	    /***** Do footer *****/
 	    $tempString = $html_footer;
 		
-		if($this->setting('ical'))
-			$tag_loadiCalButton = $this->loadiCalLink();
-			
 		// replace potential variables in footer
 		$tempString = str_replace("[[TodayData]]", $this->tag_HiddenData, $tempString);
 		$tempString = str_replace("[[TimeTrackValues]]", $tag_timeTrackValues, $tempString);
-		$tempString = str_replace("[[Load_iCal]]", $tag_loadiCalButton, $tempString);
 		
 	    $ret .= $tempString;	
 		$ret = $this->stripLeadingSpace($ret);
@@ -780,40 +708,27 @@ class Calendar extends CalendarArticles
 	    $daysInMonth = Common::getDaysInMonth($month,$year); // 28-31
 		$weeksInMonth = ceil( ($dayOfWeek + $daysInMonth)/7 ) ; // 4-6
 	
-		if( $this->setting("monday") && !$this->setting("5dayweek") ) $offset = 2;
+		if( $this->setting("monday")) $offset = 2;
 	
 		$counter = $theDay = -($dayOfWeek-$offset);
 		$ret = "";
-		
-		$bfiveDayWeek = $this->setting("5dayweek");
 		
 		for ($week = 0; $week < $weeksInMonth; $week+=1){
 			$bValidWeek = false;
 			$temp = "<tr>";	
 			
 			for ($day = 0; $day < 7; $day+=1){
-				$bSkipDay = false;
-				
-				
 				if($counter > $daysInMonth) $theDay = 0; // we want these days to be grey or empty...etc
 				
-				if( ($day == 0 or $day == 6) && $bfiveDayWeek ){
-					$bSkipDay = true;
-				}	
+				if($theDay > 0) $bValidWeek = true; 
 				
-				if( !$bSkipDay ){
-					if($theDay > 0) $bValidWeek = true; 
-					
-					if($simplemonth){
-						$todayStyle = "style='background-color: #C0C0C0;font-weight:bold;'";
-                        // TODO this will impact the view of year.
-						//$link = $this->buildAddEventLink($month, $theDay, $year, $theDay);
-
-						$temp .= "<td class='yearWeekday $todayStyle'>$link</td>";
-					}
-					else{
-						$temp .= $this->getHTMLForDay($month, $theDay, $year);
-					}
+				if($simplemonth){
+					$todayStyle = "style='background-color: #C0C0C0;font-weight:bold;'";
+                    // TODO this will impact the view of year.
+					//$link = $this->buildAddEventLink($month, $theDay, $year, $theDay);
+                    $temp .= "<td class='yearWeekday $todayStyle'>$link</td>";
+				} else{
+					$temp .= $this->getHTMLForDay($month, $theDay, $year);
 				}
 				
 				$counter++;
@@ -899,19 +814,6 @@ class Calendar extends CalendarArticles
 		}
 		unset ($pages);
 		
-		// depreciated (around 1/1/2009)
-		// old format: ** name (12-15-2008) - Event 1 **
-		if($this->setting('enablelegacy')){
-			$date = "$month-$day-$year";
-			$name = $this->setting('name');
-			$search = "$this->namespace:$name ($date)";
-			$pages = PrefixSearch::titleSearch( $search, '100');
-			
-			foreach($pages as $page) {
-				$this->addArticle($month, $day, $year, $page);
-			}
-			unset ($pages);
-		}
 	}
 
 	// this is a general find/replace for the date format
@@ -987,12 +889,9 @@ class Calendar extends CalendarArticles
 				<td class='yearHeading'>" . substr(Common::translate(3,'weekday'),0,1) . "</td>
 				<td class='yearHeading'>" . substr(Common::translate(4,'weekday'),0,1) . "</td>
 				<td class='yearHeading'>" . substr(Common::translate(5,'weekday'),0,1) . "</td>
-				<td class='yearHeading'>" . substr(Common::translate(6,'weekday'),0,1) . "</td>";
-			if(!$this->setting('5dayweek')){	
-				$ret .= 
-					"<td class='yearHeading'>" . substr(Common::translate(7,'weekday'),0,1) . "</td>
-					<td class='yearHeading'>" . substr(Common::translate(1,'weekday'),0,1) . "</td>";
-			}		
+				<td class='yearHeading'>" . substr(Common::translate(6,'weekday'),0,1) . "</td>
+				<td class='yearHeading'>" . substr(Common::translate(7,'weekday'),0,1) . "</td>
+				<td class='yearHeading'>" . substr(Common::translate(1,'weekday'),0,1) . "</td>";
 		}
 		else{
 			$ret .= "
@@ -1000,12 +899,9 @@ class Calendar extends CalendarArticles
 				<td class='yearHeading'>" . substr(Common::translate(2,'weekday'),0,1) . "</td>
 				<td class='yearHeading'>" . substr(Common::translate(3,'weekday'),0,1) . "</td>
 				<td class='yearHeading'>" . substr(Common::translate(4,'weekday'),0,1) . "</td>
-				<td class='yearHeading'>" . substr(Common::translate(5,'weekday'),0,1) . "</td>";
-			if(!$this->setting('5dayweek')){	
-				$ret .= 
-					"<td class='yearHeading'>" . substr(Common::translate(6,'weekday'),0,1) . "</td>
-					<td class='yearHeading'>" . substr(Common::translate(7,'weekday'),0,1) . "</td>";
-			}
+				<td class='yearHeading'>" . substr(Common::translate(5,'weekday'),0,1) . "</td>
+				<td class='yearHeading'>" . substr(Common::translate(6,'weekday'),0,1) . "</td>
+				<td class='yearHeading'>" . substr(Common::translate(7,'weekday'),0,1) . "</td>";
 		}
 		
 		$ret.= $this->getMonthHTML($month,$year,true);
@@ -1048,7 +944,7 @@ class Calendar extends CalendarArticles
 		return $html_head . $ret . $this->tag_HiddenData . $html_foot ;
 	}
 	
-	function renderWeek($fiveDay=false){
+	function renderWeek(){
 		$this->initalizeMonth(0,8);
 		
 		//defaults
@@ -1078,11 +974,9 @@ class Calendar extends CalendarArticles
 		$tag_weekForward = "<input class='btn' name='weekForward' type='submit' value='>>'>";		
 		$tag_todayButton = "<input class='btn' name='today' type='submit' value=\"$btnToday\">";
 		
-		if(!$fiveDay){
-			$sunday = "<td class='calendarHeading'>" . Common::translate(1, 'weekday'). "</td>";
-			$saturday = "<td class='calendarHeading'>" . Common::translate(7, 'weekday'). "</td>";
-			$colspan = 4; //adjust for mode buttons
-		}
+		$sunday = "<td class='calendarHeading'>" . Common::translate(1, 'weekday'). "</td>";
+		$saturday = "<td class='calendarHeading'>" . Common::translate(7, 'weekday'). "</td>";
+		$colspan = 4; //adjust for mode buttons
 		
 		//hide mode buttons if selected via parameter tag
 		$ret .= "<tr>&nbsp;<td></td><td $styleTitle colspan=2>&nbsp;$title</td>"
@@ -1111,11 +1005,8 @@ class Calendar extends CalendarArticles
 			$ret .= "<td></td></tr>";
 		}
 		
-		if($fiveDay && !$this->setting('monday')) 
-			Common::getNextValidDate($month, $day, $year);
 		
 		for($i=0; $i<7; $i++){
-			if($fiveDay && $i==0) $i=2;
 			$week .= $this->getHTMLForDay($month, $day, $year, 'short', 'week');
 			Common::getNextValidDate($month, $day, $year);
 		}
@@ -1146,94 +1037,6 @@ class Calendar extends CalendarArticles
 		$this->arrSettings[$params] = $value;
 	}
 	
-	// php has a defualt of 30sec to run a script, so it can timeout...
-	function load_iCal($ical_data){
-		$this->debug->set('load_iCal Started');
-		
-		$bMulti = false;
-		$iCal = new ical_calendar;
-
-		$bExpired = false;
-		$bOverwrite = false;
-		$description = "";
-		$summary = "";
-		
-		//make sure we're good before we go further
-		if(!$iCal->setFile($ical_data)) return;
-		
-		$arr = $iCal->getData();
-	
-		if($this->setting('ical', false) == 'overwrite')
-			$bOverwrite = true;
-	
-		set_time_limit(120); //increase the script timeout for this load to 2min	
-		$cnt = 0;
-		foreach($arr as $event){
-			$bExpired = false; //reset per loop
-			
-			if(isset($event['DTSTART'])){
-				$start = $event['DTSTART'];
-				
-				if(isset($event['SUMMARY'])) 
-					$summary = $event['SUMMARY'];
-					
-				if(isset($event['DESCRIPTION'])) 
-					$description = $event['DESCRIPTION'];	
-					
-				if(!isset($event['DTEND'])) 
-					$event['DTEND'] = $event['DTSTART'];
-				
-				//$date_string = $start['mon']."-".$start['mday']."-".$start['year'];	
-				
-				$date_string = $this->userDateFormat($start['mon'], $start['mday'], $start['year']);
-				$page = $this->getNextAvailableArticle($this->calendarPageName, $date_string, true);
-
-				$date_diff = ceil(Common::day_diff($event['DTSTART'], $event['DTEND']));
-				if($date_diff > 1)
-					$summary = $date_diff . "#" . $summary; //multiple day events
-				
-				// add events
-				if(!isset($event['RRULE'])){
-					$this->createNewMultiPage($page, $summary, $description, "iCal Import");
-					$cnt++;
-				}
-				else{
-					$recurrence_page = "$this->calendarPageName/recurrence";
-					
-					//clean up the RRULE some to fit this calendars need...
-					$byday = $bymonth = "";	
-					if(stripos($event['RRULE'], "BYDAY") === false) $byday = ";DAY=" . $start['mday'];	
-					if(stripos($event['RRULE'], "BYMONTH") === false) $bymonth = ";BYMONTH=" . $start['mon'];				
-	
-					$rrule = "RRULE:" . $event['RRULE']
-						. $bymonth
-						. $byday 
-						. ";SUMMARY=" . $summary;
-
-					$rules = $this->convertRRULEs($rrule);
-
-					if(isset($rules[0]['UNTIL'])){
-						$bExpired = $this->checkExpiredRRULE($rules[0]['UNTIL']);
-					}
-						
-					if(!$bExpired){
-						//add recurrences
-						$cnt += $this->updateRecurrence($recurrence_page, $rrule, $summary, "iCal Import", $bOverwrite);
-						$bOverwrite = false; //just need to hit the overwrite one time to delete the page...
-					}
-					
-					unset($rules);
-				}
-			}
-		}
-		
-		set_time_limit(30);
-		
-		$cookieName = str_replace(' ', '_', ($this->calendarPageName . "_ical_count"));
-		setcookie($cookieName,$cnt);
-				
-		$this->debug->set('load_iCal Ended');
-	}
 	
 	// get the extension short 'URL' path ex:( /mediawiki/extensions/calendar/ )
 	// ... there has to be a better way then this!
@@ -1301,9 +1104,6 @@ function displayCalendar($paramstring, $params = array()) {
 	// normal calendar...
 	$calendar->calendarPageName = "$title/$name";
 	
-	// just in case i rename some preferences... we can make them backwards compatible here...
-	legacyAliasChecks($params);
-	
 	// if the calendar isn't in a namespace(s) specificed in $wgCalendarForceNamespace, return a warning
 	// this can be a string or an array
 	if(isset($wgCalendarForceNamespace)){
@@ -1362,10 +1162,6 @@ function displayCalendar($paramstring, $params = array()) {
 		$params['locktemplates'] = true;
 	}
 
-	if(isset($params["5dayweek"])){
-		$params['monday'] = true;
-	}
-	
 	// this needs to be last after all required $params are updated, changed, defaulted or whatever
 	$calendar->arrSettings = $params;
 	
@@ -1397,21 +1193,6 @@ function displayCalendar($paramstring, $params = array()) {
 	if(isset($params['date'])) $userMode = 'day';
 	if(isset($params['simplemonth'])) $userMode = 'simplemonth';
 
-	if(isset($_COOKIE['calendar_ical'])){
-		$calendar->debug->set('ical cookie loaded');		
-
-		$calendar->load_iCal($_COOKIE['calendar_ical']);
-		
-		//delete ical file in "mediawiki/images" folder	
-		@unlink($_COOKIE['calendar_ical']); 
-		
-		// delete the ical path cookie
-		setcookie('calendar_ical', "", time() -3600);
-
-		// refresh the calendar's newly added events
-		$calendar->invalidateCache=true;
-	}
-	
 	$render = $calendar->renderCalendar($userMode);
 	
 	// purge main calendar before displaying the calendar
@@ -1422,11 +1203,6 @@ function displayCalendar($paramstring, $params = array()) {
 	}
 
 	return $render;
-}
-
-// alias ugly/bad preferences to newer, hopefully better names
-function legacyAliasChecks(&$params) {
-	if( isset($params['usemultievent']) ) $params['usesectionevents'] = 'usesectionevents';
 }
 
 function wfCalendarFunctions_Magic( &$magicWords, $langCode ) {

@@ -382,58 +382,6 @@
 		return $ret;
 	}
 	
-	// RRULE:FREQ=YEARLY;INTERVAL=1;BYMONTH=10;BYDAY=2MO;MONTH=10;DAY=14;SUMMARY=Columbus Day 
-	public function addVCalEvents($page, $year, $month){	
-		$arrRRULES = array();
-		
-		$ical_short_day = array("SU"=>0,"MO"=>1,"TU"=>2,"WE"=>3,"TH"=>4,"FR"=>5,"SA"=>6);	
-		
-		$articleName = "$page/recurrence";
-		$article = new Article(Title::newFromText($articleName));
-		$bExists = $article->exists();
-		
-		if($bExists){
-			$body  = trim($article->fetchContent(0,false,false));
-			$arrRRULES = $this->convertRRULEs($body);
-		} else return;
-
-		foreach($arrRRULES as $rules){
-
-			$bExpired = false;
-			if(isset($rules['UNTIL'])){
-				$bExpired = $this->checkExpiredRRULE($rules['UNTIL']);
-			}
-			
-			if($bExpired) continue; // skip the rest of the current loop iteration
-		
-			if($rules['FREQ'] == 'YEARLY' && !isset($rules['BYDAY']) && $rules['BYMONTH'] == $month){ //std sameday recurrence
-				$this->buildEvent($month, $rules['DAY'], $year, $rules['SUMMARY'], $articleName, "", 'recurrence');
-			}
-			else if ($rules['FREQ'] == 'YEARLY' && isset($rules['BYDAY']) && $rules['BYMONTH'] == $month){
-				$num = $rules['BYDAY'];
-		
-				// parse the ical format for BYDAY (1MO, 4TH, 2WE, etc)
-				settype($num, 'integer'); //get the numeric value of BYDAY
-				$ical_weekday = str_replace($num, "", $rules['BYDAY']); //get the weekday text value of BYDAY
-				$day = $ical_short_day[$ical_weekday]; // take the text and get the 0-6 numeric value (SU=0, MO=1, etc)
-
-				$wday_info = Common::wdayOffset($month,$year,$day);
-				$offset = $wday_info['offset'];
-				
-				// if we have something like -1SU; then handle it here...
-				if($num < 0)
-					$num = ($wday_info['weeks'] +1) + $num;
-					
-				// kick back the week count if needed
-				if($offset > 0 && $num != 0) $num--;
-
-				$theday = $offset + (7 * $num);
-				$this->buildEvent($month, $theday, $year, $rules['SUMMARY'], $articleName, "", 'recurrence');
-			}	
-		}
-		unset($rules);
-	}
-
 	// filter out RRULE-'UNTIL' expired events
 	function checkExpiredRRULE($date){
 		
