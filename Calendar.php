@@ -115,9 +115,9 @@ function wfCalendarExtension() {
 // Hook to inject Calendar into sidebar
 function wfCalendarSkinTemplateOutputPageBeforeExec( &$skin, &$tpl ) {
     global $wgCalendarSidebarRef;
-    $html = displayCalendar('', array('simplemonth' => true, 'fullsubscribe' => $wgCalendarSidebarRef));
-    $html .= displayCalendar('', array('date' => 'today', 'fullsubscribe' => $wgCalendarSidebarRef));
-    $html .= displayCalendar('', array('date' => 'tomorrow', 'fullsubscribe' => $wgCalendarSidebarRef));
+    $html = displayCalendar('', array('simplemonth' => true));
+    $html .= displayCalendar('', array('date' => 'today'));
+    $html .= displayCalendar('', array('date' => 'tomorrow'));
     if ( $html ) $tpl->data['sidebar']['calendar'] = $html;
     return true;
 }
@@ -145,12 +145,10 @@ class Calendar extends CalendarArticles
 	var $disableConfigLink = true;
 
 	var $arrAlerts = array();
-	var $subscribedPages = array();
 	
 	var $tag_views = "";
 	
 	var $invalidateCache = false;
-	var $isFullSubscribe = false;	
 										
     function Calendar($wikiRoot, $debug) {
 		$this->wikiRoot = $wikiRoot;
@@ -518,12 +516,8 @@ class Calendar extends CalendarArticles
 		$month = 1;//$this->month;
 		$additionMonths = $this->month + 12;
 		
-		// lets just grab the next 12 months...this load only takes about .01 second per subscribed calendar
+		// lets just grab the next 12 months
 		for($i=0; $i < $additionMonths; $i++){ // loop thru 12 months
-			foreach($this->subscribedPages as $page)
-				$this->addTemplate($month, $year, $page);
-
-			
 			$this->addTemplate($month, $year, ($this->calendarPageName));		
 			$year = ($month == 12 ? ++$year : $year);
 			$month = ($month == 12 ? 1 : ++$month);
@@ -538,12 +532,8 @@ class Calendar extends CalendarArticles
 		$month = 1;//$this->month;
 		$additionMonths = $this->month + 12;
 		
-		// lets just grab the next 12 months...this load only takes about .01 second per subscribed calendar
-		for($i=0; $i < $additionMonths; $i++){ // loop thru 12 months
-			foreach($this->subscribedPages as $page){
-				$this->addVCalEvents($page, $year, $month);
-			}
-			
+		// lets just grab the next 12 months
+        for($i=0; $i < $additionMonths; $i++){ // loop thru 12 months
 			$this->addVCalEvents($this->calendarPageName, $year, $month);
 			$year = ($month == 12 ? ++$year : $year);
 			$month = ($month == 12 ? 1 : ++$month);
@@ -816,7 +806,8 @@ class Calendar extends CalendarArticles
 					
 					if($simplemonth){
 						$todayStyle = "style='background-color: #C0C0C0;font-weight:bold;'";
-						$link = $this->buildAddEventLink($month, $theDay, $year, $theDay);
+                        // TODO this will impact the view of year.
+						//$link = $this->buildAddEventLink($month, $theDay, $year, $theDay);
 
 						$temp .= "<td class='yearWeekday $todayStyle'>$link</td>";
 					}
@@ -908,14 +899,6 @@ class Calendar extends CalendarArticles
 		}
 		unset ($pages);
 		
-		// subscribed events
-		foreach($this->subscribedPages as $subscribedPage){
-			$search = "$subscribedPage/$date";
-			$pages = PrefixSearch::titleSearch( $search, '100' );
-			foreach($pages as $page)
-				$this->addArticle($month, $day, $year, $page);			
-		}
-	
 		// depreciated (around 1/1/2009)
 		// old format: ** name (12-15-2008) - Event 1 **
 		if($this->setting('enablelegacy')){
@@ -985,10 +968,6 @@ class Calendar extends CalendarArticles
 		$prev = $next = "";
 	
 		$monthname = Common::translate($month,'month_short');
-		if ( $this->isFullSubscribe ) {
-			$monthname = "<a title='$this->calendarPageName' href='" . $this->wikiRoot . substr($this->calendarPageName, 0, strrpos($this->calendarPageName, "/")) . "'>" . $monthname . "</a>";
-		}
-
 		$monthyear = "$monthname, $this->year";
 		
 		if(!$disableNavButtons){
@@ -1329,7 +1308,7 @@ function displayCalendar($paramstring, $params = array()) {
 	// this can be a string or an array
 	if(isset($wgCalendarForceNamespace)){
 		if(is_array($wgCalendarForceNamespace)){
-			if(!in_array($calendar->namespace,$wgCalendarForceNamespace)  && !isset($params["fullsubscribe"]) ) {
+			if(!in_array($calendar->namespace,$wgCalendarForceNamespace)) {
 				
 				$namespaces = "";
 				foreach($wgCalendarForceNamespace as $namespace){
@@ -1339,7 +1318,7 @@ function displayCalendar($paramstring, $params = array()) {
 				return Common::translate('invalid_namespace') . '<b>'.$namespaces.'</b>';
 			}
 		}
-		else if ( $wgCalendarForceNamespace != $calendar->namespace  && !isset($params["fullsubscribe"]) ){
+		else if ( $wgCalendarForceNamespace != $calendar->namespace){
 			return Common::translate('invalid_namespace') . '<b>'.$wgCalendarForceNamespace.'</b>';
 		}
 	}
@@ -1390,27 +1369,7 @@ function displayCalendar($paramstring, $params = array()) {
 	// this needs to be last after all required $params are updated, changed, defaulted or whatever
 	$calendar->arrSettings = $params;
 	
-	// joint calendar...pulling data from our calendar and the subscribers...ie: "title/name" format
-	if(isset($params["subscribe"])) 
-		if($params["subscribe"] != "subscribe") $calendar->subscribedPages = split(",", $params["subscribe"]);
-
-	// subscriber only calendar...basically, taking the subscribers identity fully...ie: "title/name" format
-	if( isset($params["fullsubscribe"]) ) {
-		if($params["fullsubscribe"] != "fullsubscribe") {
-			$arrString = explode('/', $params["fullsubscribe"]);
-			array_pop($arrString);
-			$string = implode('/', $arrString);
-			$article = new Article(Title::newFromText( $string ));
-			
-			// if the fullsubscribe calendar doesn't exisit, return a warning...
-			if(!$article->exists()) return "Invalid 'fullsubscribe' calendar page: <b><i>$string</i></b>";
-			
-			$calendar->calendarPageName = htmlspecialchars($params["fullsubscribe"]);
-			$calendar->isFullSubscribe = true;
-		}
-	}
-	
-	// finished special conditions; set the $title and $name in the class
+    // finished special conditions; set the $title and $name in the class
 	$calendar->setTitle($title);
 	$calendar->setName($name);
 
@@ -1477,5 +1436,4 @@ function wfCalendarFunctions_Magic( &$magicWords, $langCode ) {
     }
     return true;
 }
-
 
