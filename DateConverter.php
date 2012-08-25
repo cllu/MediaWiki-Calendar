@@ -131,17 +131,3 @@ class convertCalendarDates
 }
 
 }//end mediawiki environment
-
-
-
-
-
-
-
-
-
-
-
-
-
-//
